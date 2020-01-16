@@ -21,6 +21,12 @@ may not necessarily agree on what's in the filters. This latest version fixes
 this, but will also be incompatible with filters constructed with any previous
 versions.
 
+## **Changes in this fork**
+
+* Make all code and test work under python3. New changes will not test on python2
+* Bug Fix
+* Add a counter. So we can know an approximate number of items which have been inserted into this filter. The counter is disable default.
+
 Installation
 ============
 

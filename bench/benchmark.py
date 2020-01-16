@@ -13,12 +13,12 @@ error    = 0.1
 
 print('Generating %i random test words' % (count * 2))
 start = -time.time()
-included  = [''.join(random.sample(string.lowercase, 20)) for i in range(count)]
-outcluded = [''.join(random.sample(string.lowercase, 20)) for i in range(count)]
+included  = [''.join(random.sample(string.ascii_lowercase, 20)).encode() for i in range(count)]
+outcluded = [''.join(random.sample(string.ascii_lowercase, 20)).encode() for i in range(count)]
 start += time.time()
 print('Generated random test words in %fs' % start)
 
-p = pyreBloom.pyreBloom('pyreBloomTesting', capacity, error)
+p = pyreBloom.pyreBloom(b'pyreBloomTesting', capacity, error, count=True)
 p.delete()
 
 print('Filter using %i hash functions and %i bits' % (p.hashes, p.bits))

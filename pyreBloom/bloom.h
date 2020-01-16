@@ -33,6 +33,7 @@ enum {
     PYREBLOOM_ERROR = -1
 };
 
+
 // And now for some redis stuff
 typedef struct {
 	uint32_t        capacity;
@@ -42,12 +43,16 @@ typedef struct {
 	double          error;
 	uint32_t      * seeds;
 	char          * key;
+    char          * key_counter;
+    char            counter_value[32];
     char          * password;
 	redisContext  * ctxt;
     char         ** keys;
+    uint32_t        count;
+    char            errstr[128];
 } pyrebloomctxt;
 
-int init_pyrebloom(pyrebloomctxt * ctxt, char * key, uint32_t capacity, double error, char* host, uint32_t port, char* password, uint32_t db);
+int init_pyrebloom(pyrebloomctxt * ctxt, char * key, uint32_t capacity, double error, char* host, uint32_t port, char* password, uint32_t db, uint32_t count);
 int free_pyrebloom(pyrebloomctxt * ctxt);
 
 int add(pyrebloomctxt * ctxt, const char * data, uint32_t len);
@@ -59,5 +64,9 @@ int check_next(pyrebloomctxt * ctxt);
 int delete(pyrebloomctxt * ctxt);
 
 uint64_t hash(const char* data, uint32_t len, uint64_t seed, uint64_t bits);
+
+uint32_t incr_counter(pyrebloomctxt * ctxt, uint32_t num);
+
+uint32_t get_counter(pyrebloomctxt * ctxt);
 
 #endif

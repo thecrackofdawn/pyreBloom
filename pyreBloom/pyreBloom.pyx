@@ -45,29 +45,38 @@ cdef class pyreBloom(object):
 			return self.context.hashes
 
 	def __cinit__(self, key, capacity, error, host=b'127.0.0.1', port=6379,
-		password=b'', db=0):
+		password=b'', db=0, count=False):
 		self.key = key
 		if bloom.init_pyrebloom(&self.context, self.key, capacity,
-			error, host, port, password, db):
-			raise pyreBloomException(self.context.ctxt.errstr)
+			error, host, port, password, db, count):
+			raise pyreBloomException(self.context.errstr)
 
 	def __dealloc__(self):
 		bloom.free_pyrebloom(&self.context)
 
 	def delete(self):
 		bloom.delete(&self.context)
+	
+	def get_item_num(self):
+		if bloom.get_counter(&self.context):
+			raise pyreBloomException(self.context.errstr)
+		return self.context.counter_value
 
-	def put(self, value):
-		if isinstance(value, str) or isinstance(value, bytes):
+	def put(self, value):	
+		if isinstance(value, bytes):
 			bloom.add(&self.context, value, len(value))
 			r = bloom.add_complete(&self.context, 1)
 		elif getattr(value, '__iter__', False):
-			r = [bloom.add(&self.context, v, len(v)) for v in value]
+			for v in value:
+				bloom.add(&self.context, v, len(v))
 			r = bloom.add_complete(&self.context, len(value))
 		else:
-			raise Exception("unsupport value type")
+			raise Exception("unsupport value type, suport bytes or a list of bytes")
+		
 		if r < 0:
-			raise pyreBloomException(self.context.ctxt.errstr)
+			raise pyreBloomException(self.context.errstr)
+		if self.context.count:
+			bloom.incr_counter(&self.context, r)
 		return r
 
 	def add(self, value):
@@ -77,38 +86,40 @@ cdef class pyreBloom(object):
 		return self.put(values)
 
 	def contains(self, value):
-		if isinstance(value, str) or isinstance(value, bytes):
+		if isinstance(value, bytes):
 			bloom.check(&self.context, value, len(value))
 			r = bloom.check_next(&self.context)
 			if (r < 0):
-				raise pyreBloomException(self.context.ctxt.errstr)
+				raise pyreBloomException(self.context.errstr)
 			return bool(r)
 		# If the object is 'iterable'...
 		elif getattr(value, '__iter__', False):
-			r = [bloom.check(&self.context, v, len(v)) for v in value]
+			for v in value:
+				bloom.check(&self.context, v, len(v))
 			r = [bloom.check_next(&self.context) for i in range(len(value))]
 			if (r and min(r) < 0):
-				raise pyreBloomException(self.context.ctxt.errstr)
+				raise pyreBloomException(self.context.errstr)
 			return [v for v, included in zip(value, r) if included]
 		else:
-			raise Exception("unsupport value type")
+			raise Exception("unsupport value type, suport bytes or a list of bytes")
 
 	def ncontains(self, value):
-		if isinstance(value, str) or isinstance(value, bytes):
+		if isinstance(value, bytes):
 			bloom.check(&self.context, value, len(value))
 			r = bloom.check_next(&self.context)
 			if (r < 0):
-				raise pyreBloomException(self.context.ctxt.errstr)
-			return bool(r)
+				raise pyreBloomException(self.context.errstr)
+			return not bool(r)
 		# If the object is 'iterable'...
 		elif getattr(value, '__iter__', False):
-			r = [bloom.check(&self.context, v, len(v)) for v in value]
+			for v in value:
+				bloom.check(&self.context, v, len(v))
 			r = [bloom.check_next(&self.context) for i in range(len(value))]
 			if (r and min(r) < 0):
-				raise pyreBloomException(self.context.ctxt.errstr)
+				raise pyreBloomException(self.context.errstr)
 			return [v for v, included in zip(value, r) if not included]
 		else:
-			raise Exception("unsupport value type")
+			raise Exception("unsupport value type, suport bytes or a list of bytes")
 
 	def __contains__(self, value):
 		return self.contains(value)
