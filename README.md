@@ -23,9 +23,9 @@ versions.
 
 ## **Changes in this fork**
 
-* Make all code and test work under python3. New changes will not test on python2
+* Make all code and test work under python3. New changes will not be tested on python2
 * Bug Fix
-* Add a counter. So we can know an approximate number of items which have been inserted into this filter. The counter is disable default.
+* Add a counter. So we can know an approximate number of items which have been inserted into this filter. The counter is disabled default.
 
 Installation
 ============
@@ -68,7 +68,7 @@ key name, a capacity, and an error rate:
 
 ```python
 import pyreBloom
-p = pyreBloom.pyreBloom('myBloomFilter', 100000, 0.01)
+p = pyreBloom.pyreBloom(b'myBloomFilter', 100000, 0.01)
 # You can find out how many bits this will theoretically consume
 p.bits
 # And how many hashes are needed to satisfy the false positive rate
@@ -78,7 +78,7 @@ p.hashes
 From that point, you can add elements quite easily:
 
 ```python
-tests = ['hello', 'how', 'are', 'you', 'today']
+tests = [b'hello', b'how', b'are', b'you', b'today']
 p.extend(tests)
 ```
 
@@ -86,9 +86,9 @@ The batch mode of `contains` differs from the serial version in that it actually
 returns which elements are in the bloom filter:
 
 ```python
-p.contains('hello')
+p.contains(b'hello')
 # True
-p.contains(['hello', 'whats', 'new', 'with', 'you'])
+p.contains([b'hello', b'whats', b'new', b'with', b'you'])
 # ['hello', 'you']
 'hello' in p
 # True

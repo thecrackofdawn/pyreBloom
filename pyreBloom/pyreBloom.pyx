@@ -26,104 +26,124 @@ import random
 
 cimport bloom
 
+from libc.stdint cimport uint32_t
 
 class pyreBloomException(Exception):
-	'''Some sort of exception has happened internally'''
-	pass
+    '''Some sort of exception has happened internally'''
+    pass
 
 
 cdef class pyreBloom(object):
-	cdef bloom.pyrebloomctxt context
-	cdef bytes               key
+    cdef bloom.pyrebloomctxt context
+    cdef bytes               key
+    cdef uint32_t			 chunk_size
 
-	property bits:
-		def __get__(self):
-			return self.context.bits
+    property bits:
+        def __get__(self):
+            return self.context.bits
 
-	property hashes:
-		def __get__(self):
-			return self.context.hashes
+    property hashes:
+        def __get__(self):
+            return self.context.hashes
 
-	def __cinit__(self, key, capacity, error, host=b'127.0.0.1', port=6379,
-		password=b'', db=0, count=False):
-		self.key = key
-		if bloom.init_pyrebloom(&self.context, self.key, capacity,
-			error, host, port, password, db, count):
-			raise pyreBloomException(self.context.errstr)
+    def __cinit__(self, key, capacity, error, host=b'127.0.0.1', port=6379,
+        password=b'', db=0, count=False):
+        self.key = key
+        if bloom.init_pyrebloom(&self.context, self.key, capacity,
+            error, host, port, password, db, count):
+            raise pyreBloomException(self.context.errstr)
+        self.chunk_size = int(10000/self.hashes)
 
-	def __dealloc__(self):
-		bloom.free_pyrebloom(&self.context)
+    def __dealloc__(self):
+        bloom.free_pyrebloom(&self.context)
 
-	def delete(self):
-		bloom.delete(&self.context)
-	
-	def get_item_num(self):
-		if bloom.get_counter(&self.context):
-			raise pyreBloomException(self.context.errstr)
-		return self.context.counter_value
+    def delete(self):
+        bloom.delete(&self.context)
+    
+    def get_item_num(self):
+        if bloom.get_counter(&self.context):
+            raise pyreBloomException(self.context.errstr)
+        return self.context.counter_value
 
-	def put(self, value):	
-		if isinstance(value, bytes):
-			bloom.add(&self.context, value, len(value))
-			r = bloom.add_complete(&self.context, 1)
-		elif getattr(value, '__iter__', False):
-			for v in value:
-				bloom.add(&self.context, v, len(v))
-			r = bloom.add_complete(&self.context, len(value))
-		else:
-			raise Exception("unsupport value type, suport bytes or a list of bytes")
-		
-		if r < 0:
-			raise pyreBloomException(self.context.errstr)
-		if self.context.count:
-			bloom.incr_counter(&self.context, r)
-		return r
+    def put(self, value):	
+        if isinstance(value, bytes):
+            bloom.add(&self.context, value, len(value))
+            r = bloom.add_complete(&self.context, 1)
+        elif isinstance(value, (list, tuple)):
+            for v in value:
+                bloom.add(&self.context, v, len(v))
+            r = bloom.add_complete(&self.context, len(value))
+        else:
+            raise Exception("unsupport value type, suport bytes or a list of bytes")
+        
+        if r < 0:
+            raise pyreBloomException(self.context.errstr)
+        if self.context.count:
+            bloom.incr_counter(&self.context, r)
+        return r
 
-	def add(self, value):
-		return self.put(value)
+    def add(self, value):
+        return self.put(value)
 
-	def extend(self, values):
-		return self.put(values)
+    def extend(self, values):
+        ## WARNING: keep the size of pipeline to chunk_size
+        counter = 0
+        groups = (values[i:i + self.chunk_size] for i in range(0, len(values), self.chunk_size))
+        for group in groups:
+            counter += self.put(group)
+        return counter
 
-	def contains(self, value):
-		if isinstance(value, bytes):
-			bloom.check(&self.context, value, len(value))
-			r = bloom.check_next(&self.context)
-			if (r < 0):
-				raise pyreBloomException(self.context.errstr)
-			return bool(r)
-		# If the object is 'iterable'...
-		elif getattr(value, '__iter__', False):
-			for v in value:
-				bloom.check(&self.context, v, len(v))
-			r = [bloom.check_next(&self.context) for i in range(len(value))]
-			if (r and min(r) < 0):
-				raise pyreBloomException(self.context.errstr)
-			return [v for v, included in zip(value, r) if included]
-		else:
-			raise Exception("unsupport value type, suport bytes or a list of bytes")
+    def contains(self, value):
+        if isinstance(value, bytes):
+            bloom.check(&self.context, value, len(value))
+            r = bloom.check_next(&self.context)
+            if (r < 0):
+                raise pyreBloomException(self.context.errstr)
+            return bool(r)
+        # If the object is 'iterable'...
+        elif isinstance(value, (list, tuple)):
+            results = []
+            groups = (value[i:i + self.chunk_size] for i in range(0, len(value), self.chunk_size))
+            for group in groups:
+                for v in group:
+                    bloom.check(&self.context, v, len(v))
+                r = [bloom.check_next(&self.context) for i in range(len(group))]
+                if (r and min(r) < 0):
+                    raise pyreBloomException(self.context.errstr)
+                for v, included in zip(group, r):
+                    if included:
+                        results.append(v)
+            return results
+        else:
+            raise Exception("unsupport value type, suport bytes or a list of bytes")
 
-	def ncontains(self, value):
-		if isinstance(value, bytes):
-			bloom.check(&self.context, value, len(value))
-			r = bloom.check_next(&self.context)
-			if (r < 0):
-				raise pyreBloomException(self.context.errstr)
-			return not bool(r)
-		# If the object is 'iterable'...
-		elif getattr(value, '__iter__', False):
-			for v in value:
-				bloom.check(&self.context, v, len(v))
-			r = [bloom.check_next(&self.context) for i in range(len(value))]
-			if (r and min(r) < 0):
-				raise pyreBloomException(self.context.errstr)
-			return [v for v, included in zip(value, r) if not included]
-		else:
-			raise Exception("unsupport value type, suport bytes or a list of bytes")
+    def ncontains(self, value):
+        if isinstance(value, bytes):
+            bloom.check(&self.context, value, len(value))
+            r = bloom.check_next(&self.context)
+            if (r < 0):
+                raise pyreBloomException(self.context.errstr)
+            return not bool(r)
+        # If the object is 'iterable'...
+        elif isinstance(value, (list, tuple)):
+            results = []
+            groups = (value[i:i + self.chunk_size] for i in range(0, len(value), self.chunk_size))
+            for group in groups:
+                for v in group:
+                    bloom.check(&self.context, v, len(v))
+                r = [bloom.check_next(&self.context) for i in range(len(group))]
+                if (r and min(r) < 0):
+                    raise pyreBloomException(self.context.errstr)
+                for v, included in zip(group, r):
+                    if not included:
+                        results.append(v)
+            return results
+        else:
+            raise Exception("unsupport value type, suport bytes or a list of bytes")
 
-	def __contains__(self, value):
-		return self.contains(value)
+    def __contains__(self, value):
+        return self.contains(value)
 
-	def keys(self):
-		'''Return a list of the keys used in this bloom filter'''
-		return [self.context.keys[i] for i in range(self.context.num_keys)]
+    def keys(self):
+        '''Return a list of the keys used in this bloom filter'''
+        return [self.context.keys[i] for i in range(self.context.num_keys)]

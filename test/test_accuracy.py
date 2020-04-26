@@ -17,7 +17,7 @@ def sample_strings(length, count):
 
 
 class BaseTest(unittest.TestCase):
-    CAPACITY = 10000
+    CAPACITY = 3000000
     ERROR_RATE = 0.1
     KEY = b'pyreBloomTesting'
 
@@ -84,7 +84,7 @@ class FunctionalityTest(BaseTest):
 
     def test_two_instances(self):
         '''Make sure two bloom filters pointing to the same key work'''
-        bloom = pyreBloom.pyreBloom(self.KEY, 10000, 0.1)
+        bloom = pyreBloom.pyreBloom(self.KEY, self.CAPACITY, 0.1)
         tests = [b'hello', b'how', b'are', b'you', b'today']
 
         # Add them through the first instance
@@ -94,6 +94,12 @@ class FunctionalityTest(BaseTest):
         # Make sure they're accessible through the second instance
         self.assertEqual(tests, bloom.contains(tests))
 
+    def test_chunk(self):
+        size = 2356384
+        samples = sample_strings(20, size)
+        self.bloom.extend(samples)
+        self.assertEqual(len(self.bloom.contains(samples)), size)
+        self.assertEqual(len(self.bloom.ncontains(samples)), 0)
 
 class DbTest(BaseTest):
     '''Make sure we can select a database'''
@@ -101,7 +107,7 @@ class DbTest(BaseTest):
         '''Can instantiate a bloom filter in a separate db'''
         bloom = pyreBloom.pyreBloom(self.KEY, self.CAPACITY, self.ERROR_RATE, db=1)
 
-        # After adding key to our db=0 bloom filter, shouldn't see it in our db=0 bloom
+        # After adding key to our db=1 bloom filter, shouldn't see it in our db=0 bloom
         samples = sample_strings(20, 100)
         self.bloom.extend(samples)
         self.assertEqual(len(bloom.contains(samples)), 0)

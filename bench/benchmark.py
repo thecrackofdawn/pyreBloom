@@ -7,7 +7,7 @@ import string
 import unittest
 import pyreBloom
 
-count    = 10000
+count    = 100000
 capacity = count * 2
 error    = 0.1
 
@@ -29,10 +29,11 @@ start += time.time()
 print('Batch insert : %fs (%f words / second)' % (start, (count / start)))
 
 p.delete()
+serial_count = 1000
 start = -time.time()
-r = [p.add(word) for word in included]
+r = [p.add(word) for word in included[:serial_count]]
 start += time.time()
-print('Serial insert: %fs (%f words / second)' % (start, (count / start)))
+print('Serial insert: %fs (%f words / second)' % (start, (serial_count / start)))
 
 start = -time.time()
 r = p.contains(included)
@@ -40,9 +41,9 @@ start += time.time()
 print('Batch test   : %fs (%f words / second)' % (start, count / start))
 
 start = -time.time()
-r = [(word in p) for word in included]
+r = [(word in p) for word in included[:serial_count]]
 start += time.time()
-print('Serial test  : %fs (%f words / second)' % (start, count / start))
+print('Serial test  : %fs (%f words / second)' % (start, serial_count / start))
 
 falsePositives = p.contains(outcluded)
 falseRate      = float(len(falsePositives)) / len(outcluded)

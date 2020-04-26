@@ -81,7 +81,7 @@ int init_pyrebloom(
         ctxt->seeds[i] = x;
         x = a * x + c;
     }
-
+    // setbuf(stdout, NULL);
     // Now for the redis context
     struct timeval timeout = { 1, 500000 };
     ctxt->ctxt = redisConnectWithTimeout(host, port, timeout);
@@ -190,8 +190,11 @@ int add(pyrebloomctxt * ctxt, const char * data, uint32_t len) {
     uint32_t i;
     for (i = 0; i < ctxt->hashes; ++i) {
         uint64_t d = hash(data, len, ctxt->seeds[i], ctxt->bits);
-        redisAppendCommand(ctxt->ctxt, "SETBIT %s %lu 1",
-            ctxt->keys[d / max_bits_per_key], d % max_bits_per_key);
+        if (redisAppendCommand(ctxt->ctxt, "SETBIT %s %lu 1", ctxt->keys[d / max_bits_per_key], d % max_bits_per_key) == REDIS_ERR){
+            // printf("redisAppendCommand error\n");
+            strncpy(ctxt->errstr, ctxt->ctxt->errstr, errstr_size);
+            return PYREBLOOM_ERROR;
+        }
     }
     return PYREBLOOM_OK;
 }
@@ -199,16 +202,14 @@ int add(pyrebloomctxt * ctxt, const char * data, uint32_t len) {
 int add_complete(pyrebloomctxt * ctxt, uint32_t count) {
     uint32_t i, j, ct = 0, total = 0;
     redisReply * reply = NULL;
-
     ctxt->ctxt->err = PYREBLOOM_OK;
     for (i = 0; i < count; ++i) {
         for (j = 0, ct = 0; j < ctxt->hashes; ++j) {
             /* Make sure that we were able to read a reply. Otherwise, provide
              * an error response */
             if (redisGetReply(ctxt->ctxt, (void**)(&reply)) == REDIS_ERR) {
-                strncpy(ctxt->errstr, "No pending replies", errstr_size);
+                strncpy(ctxt->errstr, ctxt->ctxt->errstr, errstr_size);
                 ctxt->ctxt->err = PYREBLOOM_ERROR;
-                return PYREBLOOM_ERROR;
             }
 
             /* Consume and read the response */
